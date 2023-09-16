@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+  postgresql:
+    image: ankane/pgvector
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=1234
+      - PGDATA=/var/lib/postgresql/data
+    ports:
+      - 6000:5432
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data

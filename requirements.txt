@@ -1,0 +1,14 @@
+sentence_transformers
+transformers
+matplotlib
+datasets
+psycopg2
+pandas
+torch
+numpy
+peft
+tqdm
+nltk
+rouge
+spacy
+-e .
