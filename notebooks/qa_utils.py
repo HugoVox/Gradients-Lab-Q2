@@ -103,7 +103,6 @@ def query(question, retrieve_model, emb_list, wiki, k=5, device="cuda:0"):
     cos_sim = torch.nn.functional.cosine_similarity(q_embed.unsqueeze(0), emb_list)
     top_ids = torch.topk(cos_sim, k).indices.tolist()
     context = ''.join(map(str, [wiki[x]['passage_text'] for x in top_ids]))
-    # print('Top 5 results:', best_ids)
     return context
 
 def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cuda:0"):
