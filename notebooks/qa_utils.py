@@ -1,0 +1,198 @@
+from datasets import load_dataset
+import pandas as pd
+import numpy as np
+import psycopg2
+from sentence_transformers import SentenceTransformer, util
+from transformers import AdamW, AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
+from peft import PeftConfig, PeftModel
+import torch
+
+def import_dataset():
+    '''
+    Returns the wiki_snippets data and the embedded data from PostgreSQL.
+
+            Returns:
+                    wiki (DataDict): The wiki_snippets data.
+                    data (list): The embedded data from PostgreSQL.
+
+    '''
+    wiki = load_dataset('wiki_snippets', 'wiki40b_en_100_0', split='train')
+    conn = psycopg2.connect(database="eli5",
+                            host="127.0.0.1",
+                            user="admin",
+                            password="1234",
+                            port="6000")
+
+    cursor = conn.cursor()
+
+    query = 'SELECT * FROM wiki40b;'
+
+    cursor.execute(query)
+    data =cursor.fetchall()
+
+    return wiki, data
+
+def retrieve_model():
+    '''
+    Returns the sentence transformer model.
+
+            Returns:
+                    sbert_model (SentenceTransformer): The sentence transformer model.
+
+    '''
+    sbert_model = SentenceTransformer('sentence-transformers/bert-base-nli-mean-tokens')
+    return sbert_model
+
+def generate_model(model_id = "eli5_bart_model", backbone = "yjernite/bart_eli5", device = "cuda:0"):
+    '''
+    Returns the inference model and the tokenizer.
+
+            Parameters:
+                            model_id (str): The id of LoRA model. (default is "eli5_bart_model")
+                            backbone (str): The backbone of LoRA model. (default is "yjernite/bart_eli5")
+                            device (str): The device to use. (default is "cuda:0")
+
+            Returns:
+                    inference_model (PeftModel): The inference model.
+                    tokenizer (AutoTokenizer): The tokenizer.
+
+    '''
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        backbone,
+    ).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(backbone)
+
+    inference_model = PeftModel.from_pretrained(model=model, model_id=model_id)
+    inference_model.print_trainable_parameters()
+    return inference_model, tokenizer
+
+def embedding_ref(data, device="cuda:0"):
+    '''
+    Returns the embedded data in Tensor.
+
+            Parameters:
+                            data (list): The data to be embedded.
+                            device (str): The device to use. (default is "cuda:0")
+
+            Returns:
+                    emb_list (Tensor): The embedded data.
+
+    '''
+    emb_list = [emb[1][1:-1].split(',') for emb in data]
+    for i in range(len(emb_list)):
+        emb_list[i] = [float(x) for x in emb_list[i]]
+    return torch.tensor(emb_list, dtype = torch.float64).to(device)
+
+def query(question, retrieve_model, emb_list, wiki, k=5, device="cuda:0"):
+    '''
+    Returns the top-k closest contexts based on the question by .
+
+            Parameters:
+                            question (str): The question to be answered.
+                            retrieve_model (SentenceTransformer): The sentence transformer model.
+                            emb_list (Tensor): The embedded data.
+                            wiki (DataDict): The wiki_snippets data.
+                            k (int): The number of top results. (default is 5)
+                            device (str): The device to use. (default is "cuda:0")
+
+            Returns:
+                    context (str): The context of the question.
+
+    '''
+    q_embed = torch.from_numpy(retrieve_model.encode(question)).to(device)
+    cos_sim = torch.nn.functional.cosine_similarity(q_embed.unsqueeze(0), emb_list)
+    top_ids = torch.topk(cos_sim, k).indices.tolist()
+    context = ''.join(map(str, [wiki[x]['passage_text'] for x in top_ids]))
+    # print('Top 5 results:', best_ids)
+    return context
+
+def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cuda:0"):
+    '''
+    Returns the batch of question and answer for the inference model.
+
+            Parameters:
+                            qa_list (list): The list of question and answer.
+                            tokenizer (AutoTokenizer): The tokenizer.
+                            max_len (int): The maximum length of the question. (default is 64)
+                            max_a_len (int): The maximum length of the answer. (default is 360)
+                            device (str): The device to use. (default is "cuda:0")
+            Returns:
+                    model_inputs (dict): The batch of question and answer.
+    '''
+    q_ls = [q for q, a in qa_list]
+    a_ls = [a for q, a in qa_list]
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
+    q_ids, q_mask = (
+        torch.LongTensor(q_toks["input_ids"]).to(device),
+        torch.LongTensor(q_toks["attention_mask"]).to(device),
+    )
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=min(max_len, max_a_len), pad_to_max_length=True)
+    a_ids, a_mask = (
+        torch.LongTensor(a_toks["input_ids"]).to(device),
+        torch.LongTensor(a_toks["attention_mask"]).to(device),
+    )
+    lm_labels = a_ids[:, 1:].contiguous().clone()
+    lm_labels[a_mask[:, 1:].contiguous() == 0] = -100
+    model_inputs = {
+        "input_ids": q_ids,
+        "attention_mask": q_mask,
+        "decoder_input_ids": a_ids[:, :-1].contiguous(),
+        "labels": lm_labels,
+    }
+    return model_inputs
+
+def generate_answer(
+    question_doc,
+    qa_s2s_model,
+    qa_s2s_tokenizer,
+    num_answers=1,
+    num_beams=None,
+    min_len=64,
+    max_len=256,
+    do_sample=False,
+    temp=1.0,
+    top_p=None,
+    top_k=None,
+    max_input_length=512,
+    device="cuda:0",
+):
+    '''
+    Returns the generated answer based on the question and context.
+
+            Parameters:
+                            question_doc (str): The context of the question.
+                            qa_s2s_model (PeftModel): The inference model.
+                            qa_s2s_tokenizer (AutoTokenizer): The tokenizer.
+                            num_answers (int): The number of answers. (default is 1)
+                            num_beams (int): The number of beams. (default is None)
+                            min_len (int): The minimum length of the answer. (default is 64)
+                            max_len (int): The maximum length of the answer. (default is 256)
+                            do_sample (bool): Whether to use sampling. (default is False)
+                            temp (float): The temperature of sampling. (default is 1.0)
+                            top_p (float): The top p of sampling. (default is None)
+                            top_k (int): The top k of sampling. (default is None)
+                            max_input_length (int): The maximum length of the input. (default is 512)
+                            device (str): The device to use. (default is "cuda:0")
+            Returns:
+                    answers (List): The generated answers.
+    '''
+    model_inputs = make_qa_s2s_batch([(question_doc, "A")], qa_s2s_tokenizer, max_input_length, device=device,)
+    n_beams = num_answers if num_beams is None else max(num_beams, num_answers)
+    generated_ids = qa_s2s_model.generate(
+        input_ids=model_inputs["input_ids"],
+        attention_mask=model_inputs["attention_mask"],
+        min_length=min_len,
+        max_length=max_len,
+        do_sample=do_sample,
+        early_stopping=True,
+        num_beams=1 if do_sample else n_beams,
+        temperature=temp,
+        top_k=top_k,
+        top_p=top_p,
+        eos_token_id=qa_s2s_tokenizer.eos_token_id,
+        no_repeat_ngram_size=3,
+        num_return_sequences=num_answers,
+        decoder_start_token_id=qa_s2s_tokenizer.bos_token_id,
+    )
+    answers = [qa_s2s_tokenizer.decode(ans_ids, skip_special_tokens=True).strip() for ans_ids in generated_ids]
+    return answers
