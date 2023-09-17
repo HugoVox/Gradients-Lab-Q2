@@ -1,15 +1,11 @@
-sentence_transformers
-transformers
-matplotlib
-datasets
-psycopg2
-pandas
-gradio
-torch
-numpy
-rouge
-spacy
-peft
-tqdm
-nltk
--e .
+datasets==2.14.4
+gdown==4.7.1
+gradio==3.44.3
+patool==1.12
+peft==0.5.0
+psycopg2==2.9.7
+python_on_whales==0.64.3
+sentence_transformers==2.2.2
+setuptools==65.5.0
+torch==2.0.1+cu117
+transformers==4.33.0
