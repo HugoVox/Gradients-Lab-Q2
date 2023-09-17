@@ -1,11 +1,22 @@
 from datasets import load_dataset
-import pandas as pd
-import numpy as np
 import psycopg2
-from sentence_transformers import SentenceTransformer, util
-from transformers import AdamW, AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
-from peft import PeftConfig, PeftModel
+from sentence_transformers import SentenceTransformer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from peft import PeftModel
 import torch
+from python_on_whales import DockerClient
+
+def init_database():
+    """Initialize database from docker compose
+    """
+    docker = DockerClient(compose_files=["./docker-compose.yml"])
+    docker.compose.up(detach=True)
+
+def close_database():
+    """Close database in docker compose
+    """
+    docker = DockerClient(compose_files=["./docker-compose.yml"])
+    docker.compose.down()
 
 def import_dataset():
     '''
@@ -25,7 +36,7 @@ def import_dataset():
 
     cursor = conn.cursor()
 
-    return wiki, cursor
+    return wiki, conn, cursor
 
 def retrieve_model():
     '''
@@ -61,7 +72,7 @@ def generate_model(model_id = "eli5_bart_model", backbone = "yjernite/bart_eli5"
     inference_model.print_trainable_parameters()
     return inference_model, tokenizer
 
-def query(question, retrieve_model, cursor, wiki, k=5):
+def query(question, retrieve_model, conn, cursor, wiki, k=5):
     '''
     Returns the top-k closest contexts based on the question by .
 
@@ -79,6 +90,7 @@ def query(question, retrieve_model, cursor, wiki, k=5):
     q_embed = str(retrieve_model.encode(question).tolist())
     query = f"SELECT id FROM wiki40b ORDER BY data_encoded <=> '{q_embed}' DESC LIMIT {str(k)};"
     cursor.execute(query)
+    conn.commit()
     data = cursor.fetchall()
     context = ''.join(map(str, [wiki[x]['passage_text'] for x in data]))
     # print('Top 5 results:', best_ids)
