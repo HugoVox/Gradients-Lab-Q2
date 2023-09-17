@@ -4,11 +4,12 @@ matplotlib
 datasets
 psycopg2
 pandas
+gradio
 torch
 numpy
+rouge
+spacy
 peft
 tqdm
 nltk
-rouge
-spacy
 -e .
