@@ -1,5 +1,13 @@
 import gradio as gr
 import qa_utils as utils
+import os
+
+'''
+    #* This part is for running on local machine. If you want to run on local machine, uncomment this part.
+path = r'D:\Gradients\Gradients-Lab-Q2' #! Change this to your working directory if run on local machine
+os.chdir(path)
+print("Current working directory: {0}".format(os.getcwd()))
+'''
 
 def get_answer(question):
     global wiki, data, qar_model, qas_model, conn, cursor
