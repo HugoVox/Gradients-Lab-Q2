@@ -25,12 +25,7 @@ def import_dataset():
 
     cursor = conn.cursor()
 
-    query = 'SELECT * FROM wiki40b;'
-
-    cursor.execute(query)
-    data =cursor.fetchall()
-
-    return wiki, data
+    return wiki, cursor
 
 def retrieve_model():
     '''
@@ -66,43 +61,27 @@ def generate_model(model_id = "eli5_bart_model", backbone = "yjernite/bart_eli5"
     inference_model.print_trainable_parameters()
     return inference_model, tokenizer
 
-def embedding_ref(data, device="cuda:0"):
-    '''
-    Returns the embedded data in Tensor.
-
-            Parameters:
-                            data (list): The data to be embedded.
-                            device (str): The device to use. (default is "cuda:0")
-
-            Returns:
-                    emb_list (Tensor): The embedded data.
-
-    '''
-    emb_list = [emb[1][1:-1].split(',') for emb in data]
-    for i in range(len(emb_list)):
-        emb_list[i] = [float(x) for x in emb_list[i]]
-    return torch.tensor(emb_list, dtype = torch.float64).to(device)
-
-def query(question, retrieve_model, emb_list, wiki, k=5, device="cuda:0"):
+def query(question, retrieve_model, cursor, wiki, k=5):
     '''
     Returns the top-k closest contexts based on the question by .
 
             Parameters:
                             question (str): The question to be answered.
                             retrieve_model (SentenceTransformer): The sentence transformer model.
-                            emb_list (Tensor): The embedded data.
+                            cursor (_Cursor): The cursor of PostgreSQL.
                             wiki (DataDict): The wiki_snippets data.
                             k (int): The number of top results. (default is 5)
-                            device (str): The device to use. (default is "cuda:0")
 
             Returns:
                     context (str): The context of the question.
 
     '''
-    q_embed = torch.from_numpy(retrieve_model.encode(question)).to(device)
-    cos_sim = torch.nn.functional.cosine_similarity(q_embed.unsqueeze(0), emb_list)
-    top_ids = torch.topk(cos_sim, k).indices.tolist()
-    context = ''.join(map(str, [wiki[x]['passage_text'] for x in top_ids]))
+    q_embed = str(retrieve_model.encode(question).tolist())
+    query = f"SELECT id FROM wiki40b ORDER BY data_encoded <=> '{q_embed}' DESC LIMIT {str(k)};"
+    cursor.execute(query)
+    data = cursor.fetchall()
+    context = ''.join(map(str, [wiki[x]['passage_text'] for x in data]))
+    # print('Top 5 results:', best_ids)
     return context
 
 def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cuda:0"):
