@@ -34,7 +34,7 @@ def close_database():
     docker = DockerClient(compose_files=["./docker-compose.yml"])
     docker.compose.down()
 
-def import_dataset():
+def connect_to_database():
     '''
     Returns the wiki_snippets data and the embedded data from PostgreSQL.
 
@@ -54,7 +54,10 @@ def import_dataset():
 
     return wiki, conn, cursor
 
-def retrieve_model():
+def get_device():
+    return "cuda:0" if torch.cuda.is_available() else "cpu"
+
+def retrieve_model(device):
     '''
     Returns the sentence transformer model.
 
@@ -62,7 +65,7 @@ def retrieve_model():
                     sbert_model (SentenceTransformer): The sentence transformer model.
 
     '''
-    sbert_model = SentenceTransformer('sentence-transformers/bert-base-nli-mean-tokens')
+    sbert_model = SentenceTransformer('sentence-transformers/bert-base-nli-mean-tokens').to(device)
     return sbert_model
 
 def generate_model(model_id = "eli5_bart_model", backbone = "yjernite/bart_eli5", device = "cuda:0"):

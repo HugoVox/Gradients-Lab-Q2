@@ -1,13 +1,5 @@
 import gradio as gr
 import qa_utils as utils
-import os
-
-'''
-    #* This part is for running on local machine. If you want to run on local machine, uncomment this part.
-path = r'D:\Gradients\Gradients-Lab-Q2' #! Change this to your working directory if run on local machine
-os.chdir(path)
-print("Current working directory: {0}".format(os.getcwd()))
-'''
 
 def get_answer(question):
     global wiki, data, qar_model, qas_model, conn, cursor
@@ -25,16 +17,21 @@ utils.init_database()
 print("Done!\n")
 
 print("Connecting to database...")
-wiki, conn, cursor = utils.import_dataset()
+wiki, conn, cursor = utils.connect_to_database()
 print("Database connected!\n")
 
+print("Getting available device...")
+device = utils.get_device()
+
 print("Loading retrieval model...")
-qar_model = utils.retrieve_model()
+qar_model = utils.retrieve_model(device)
 print("Done!\n")
 
 print("Loading Q&A Sentence to sentence model...")
 path = "models\eli5_bart_model"
-qas_model, qas_tokenizer = utils.generate_model(model_id=path, backbone = "yjernite/bart_eli5")
+qas_model, qas_tokenizer = utils.generate_model(model_id=path, 
+                                                backbone = "yjernite/bart_eli5",
+                                                device=device)
 print("Done!\n")
 
 print("Initializing Gradio Inteface...")
