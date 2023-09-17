@@ -8,8 +8,9 @@ def get_answer(question):
     answer = utils.generate_answer(question_doc, qas_model, qas_tokenizer)[0]
     return answer
 
+print("Checking database files...")
 utils.check_database_folder()
-exit()
+print("Done!\n")
 
 print("Initializing database...")
 utils.init_database()
