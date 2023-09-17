@@ -10,6 +10,7 @@ import patoolib
 import os
 
 def check_database_folder():
+    """Check if database folder exists, if not, download and extract it."""
     data_path = "data"
     if not ('pgdata' in os.listdir(data_path)):
         if not ('pgdata.rar' in os.listdir(data_path)):
