@@ -8,6 +8,9 @@ def get_answer(question):
     answer = utils.generate_answer(question_doc, qas_model, qas_tokenizer)[0]
     return answer
 
+utils.check_database_folder()
+exit()
+
 print("Initializing database...")
 utils.init_database()
 print("Done!\n")
@@ -25,6 +28,7 @@ path = "models\eli5_bart_model"
 qas_model, qas_tokenizer = utils.generate_model(model_id=path, backbone = "yjernite/bart_eli5")
 print("Done!\n")
 
+print("Initializing Gradio Inteface...")
 demo = gr.Interface(fn=get_answer, 
                     inputs="textbox", 
                     outputs="textbox",

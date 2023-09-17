@@ -5,6 +5,21 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from peft import PeftModel
 import torch
 from python_on_whales import DockerClient
+import gdown
+import patoolib
+import os
+
+def check_database_folder():
+    data_path = "data"
+    if not ('pgdata' in os.listdir(data_path)):
+        if not ('pgdata.rar' in os.listdir(data_path)):
+            print("Download database data from GDrive...")
+            url = 'https://drive.google.com/uc?id=17o-lXn0VWi6W7K9XUuG7qfqssfKlBq5F'
+            output = "data\pgdata.rar"
+            gdown.download(url, output, quiet=False)
+        print("Extracting database data...")
+        patoolib.extract_archive("data\pgdata.rar", 
+                                 outdir="data")
 
 def init_database():
     """Initialize database from docker compose
