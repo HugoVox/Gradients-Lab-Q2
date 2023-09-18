@@ -1,5 +1,12 @@
 import gradio as gr
 import qa_utils as utils
+import os
+
+#! For Running on local machine, uncomment the following codes
+# path = r'D:\Gradients\Gradients-Lab-Q2'   #* Change this path to your local path
+# os.chdir(path)
+# print(f'Directory is changed to {os.getcwd()}.')
+
 
 def get_answer(question):
     global wiki, data, qar_model, qas_model, conn, cursor
